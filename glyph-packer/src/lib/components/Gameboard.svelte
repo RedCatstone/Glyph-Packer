@@ -1,19 +1,34 @@
 <script lang="ts">
 	import Glyph, { type HighlightArea } from "./Glyph.svelte";
 	export type DragState = { glyph: number[][] | null; x: number; y: number };
+	export type GlyphData = { glyph: number[][]; name: String; positions: [number, number][] }
 
-    let { grid=$bindable(), cellSize, highlightGlyph, dragState=$bindable() } = $props<{
+    let { grid=$bindable(), cellSize, hoveredGlyph, dragState=$bindable(), glyphDatas } = $props<{
 		grid: number[][],
 		cellSize: number,
-		highlightGlyph: number[][] | null,
+		hoveredGlyph: GlyphData | null,
 		dragState: DragState,
+		glyphDatas: GlyphData[],
 	}>();
 
 	const gridHeight = $derived(grid.length);
 	const gridWidth = $derived(grid[0].length);
+	
+	const initialGridHeight = grid.length;
+	const initialGridWidth = grid[0].length;
+
+	const highlightedAreas = $derived((() => {
+		if (hoveredGlyph === null) return [];
+
+		const hoveredGlyphHeight = hoveredGlyph.glyph.length;
+		const hoveredGlyphWidth = hoveredGlyph.glyph[0].length;
+
+		return hoveredGlyph.positions.map(([y1, x1]: [number, number]) => ({ y1, x1, y2: y1 + hoveredGlyphHeight, x2: x1 + hoveredGlyphWidth }))
+	})());
+
 
 	let gameboardHTML: HTMLElement | null = null;
-	let dragGlyphHTML: HTMLElement | null = null;
+	let dragGlyphHTML: HTMLElement | null = $state(null);
 
 
 	function dragGlyphCalculations(clientX: number, clientY: number, release: boolean) {
@@ -47,21 +62,22 @@
 			// the glyph was dropped.
 			if (withinGrid) {
 				// expand up/left
-				while (gridY < 0) { grid.unshift(Array(gridWidth).fill(0)); gridY++; }
-				while (gridX < 0) { grid.forEach((row: number[]) => row.unshift(0)); gridX++; }
+				while (gridY < 0) { gridAddRow(true); gridY++; }
+				while (gridX < 0) { gridAddColumn(true); gridX++; }
 
 				// expand down/right
-				while (gridHeight < gridY + dragGlyphHeight) { grid.push(Array(gridWidth).fill(0)); }
-				while (gridWidth < gridX + dragGlyphWidth) { grid.forEach((row: number[]) => row.push(0)); }
+				while (gridHeight < gridY + dragGlyphHeight) { gridAddRow(false); }
+				while (gridWidth < gridX + dragGlyphWidth) { gridAddColumn(false); }
 
 				for (let dy = 0; dy < dragGlyphHeight; dy++) {
 					for (let dx = 0; dx < dragGlyphWidth; dx++) {
 						grid[gridY + dy][gridX + dx] = dragState.glyph[dy][dx];
 					}
 				}
+				updateGridPadding();
+				updateAllGlyphPositions();
 			}
 			dragState.glyph = null;
-			updateGridPadding();
 		}
 	}
 
@@ -84,62 +100,69 @@
 
 
 
-	const initialGridHeight = grid.length;
-	const initialGridWidth = grid[0].length;
-
     // add 1 extra padding row in all directions around the grid
     function updateGridPadding() {
-		if (grid.length === 0 || grid[0].length === 0) throw new Error(`grid was empty?! ${grid}`);
+		if (gridHeight === 0 || gridWidth === 0) throw new Error(`grid was empty?! ${grid}`);
 		
         // add buffer rows
-        if (grid[0].includes(1)) grid.unshift(Array(gridWidth).fill(0));
-        if (grid.at(-1)!.includes(1)) grid.push(Array(gridWidth).fill(0));
+        if (grid[0].includes(1)) gridAddRow(true);
+        if (grid.at(-1)!.includes(1)) gridAddRow(false);
 
         // add buffer columns
-        if (grid.some((row: number[]) => row[0] === 1)) grid.forEach((row: number[]) => row.unshift(0));
-        if (grid.some((row: number[]) => row.at(-1) === 1)) grid.forEach((row: number[]) => row.push(0));
+        if (grid.some((row: number[]) => row[0] === 1)) gridAddColumn(true);
+        if (grid.some((row: number[]) => row.at(-1) === 1)) gridAddColumn(false);
 
 		// trim empty rows
-		while (grid.length > initialGridHeight && !grid[0].includes(1) && !grid[1].includes(1)) {
-			grid.shift();
-		}
-		while (grid.length > initialGridHeight && !grid.at(-1)!.includes(1) && !grid.at(-2)!.includes(1)) {
-			grid.pop();
-		}
+		while (gridHeight > initialGridHeight && !grid[0].includes(1) && !grid[1].includes(1)) gridRemoveRow(true);
+		while (gridHeight > initialGridHeight && !grid.at(-1)!.includes(1) && !grid.at(-2)!.includes(1)) gridRemoveRow(false);
 		// Trim empty columns
-		while (grid[0].length > initialGridWidth && !grid.some((row: number[]) => row[0] === 1) && !grid.some((row: number[]) => row[1] === 1)) {
-			grid.forEach((row: number[]) => row.shift());
-		}
-		while (grid[0].length > initialGridWidth && !grid.some((row: number[]) => row.at(-1) === 1) && !grid.some((row: number[]) => row.at(-2) === 1)) {
-			grid.forEach((row: number[]) => row.pop());
-		}
+		while (gridWidth > initialGridWidth && !grid.some((row: number[]) => row[0] === 1) && !grid.some((row: number[]) => row[1] === 1)) gridRemoveColumn(true);
+		while (gridWidth > initialGridWidth && !grid.some((row: number[]) => row.at(-1) === 1) && !grid.some((row: number[]) => row.at(-2) === 1)) gridRemoveColumn(false);
     }
 
+	function gridAddRow(top: boolean) {
+		if (top) grid.unshift(Array(gridWidth).fill(0));
+		else grid.push(Array(gridWidth).fill(0));
+	}
+	function gridRemoveRow(top: boolean) {
+		if (top) grid.shift();
+		else grid.pop();
+	}
+	function gridAddColumn(left: boolean) {
+		if (left) grid.forEach((row: number[]) => row.unshift(0));
+		else grid.forEach((row: number[]) => row.push(0));
+	}
+	function gridRemoveColumn(left: boolean) {
+		if (left) grid.forEach((row: number[]) => row.shift())
+		else grid.forEach((row: number[]) => row.pop());
+	}
 
-    const highlightedAreas = $derived((() => {
-        const areas: HighlightArea[] = [];
-        if (!highlightGlyph) return areas;
 
-		const glyphHeight = highlightGlyph.length;
-		const glyphWidth = highlightGlyph[0].length;
-		const gridHeight = grid.length;
-		const gridWidth = grid[0].length;
+	function updateAllGlyphPositions() {
+		for (const glyphData of glyphDatas) {
+			updateGlyphPositions(glyphData);
+		}
+	}
 
-        for (let y = 0; y <= gridHeight - glyphHeight; y++) {
+	function updateGlyphPositions(glyphData: GlyphData) {
+		glyphData.positions = [];
+
+		const glyphHeight = glyphData.glyph.length;
+		const glyphWidth = glyphData.glyph[0].length;
+
+		for (let y = 0; y < gridHeight - glyphHeight; y++) {
 			for (let x = 0; x <= gridWidth - glyphWidth; x++) {
-                if (isHighlightMatch(y, x, glyphHeight, glyphWidth)) {
-			    	areas.push({ y1: y, x1: x, y2: y+glyphHeight, x2: x+glyphWidth });
-                }
+				if (isGlyphAt(glyphData.glyph, y, x, glyphHeight, glyphWidth)) {
+					glyphData.positions.push([y, x]);
+				}
 			}
 		}
+	}
 
-        return areas;
-    })());
-
-    function isHighlightMatch(startY: number, startX: number, glyphHeight: number, glyphWidth: number): boolean {
+	function isGlyphAt(glyph: number[][], y: number, x: number, glyphHeight: number, glyphWidth: number): boolean {
 		for (let gy = 0; gy < glyphHeight; gy++) {
 			for (let gx = 0; gx < glyphWidth; gx++) {
-				if (highlightGlyph![gy][gx] !== grid[startY + gy][startX + gx]) {
+				if (glyph[gy][gx] !== grid[y + gy][x + gx]) {
 					return false; // mismatch found
 				}
 			}
@@ -151,7 +174,7 @@
 
 <div class="gameboard-container">
 	<div class="gameboard-grid" bind:this={gameboardHTML}>
-		<Glyph bind:grid={grid} editable={true} highlightedAreas={highlightedAreas} onpointerup={updateGridPadding} />
+		<Glyph bind:grid={grid} editable={true} {highlightedAreas} onpointerup={() => { updateGridPadding(); updateAllGlyphPositions() }} />
 	</div>
 
 	{#if dragState.glyph !== null}
@@ -169,13 +192,38 @@
 		overflow: auto;
     }
 
+	/* .gameboard-grid {
+		mask-image: linear-gradient(
+			to bottom,
+			transparent,
+			black var(--cell-size),
+			black calc(100% - var(--cell-size)),
+			transparent
+		), linear-gradient(
+			to right,
+			transparent,
+			black var(--cell-size),
+			black calc(100% - var(--cell-size)),
+			transparent
+		);
+		mask-composite: intersect;
+	} */
+
 	.drag-glyph {
 		position: fixed;
 		top: var(--y);
 		left: var(--x);
+		transform-origin: 0 0;
 		transform: translate(-50%, -50%);
 		z-index: 69;
-		pointer-events: none;
+		/* pointer-events: none; */
 		opacity: 0.8;
+		animation: wiggle 0.4s infinite ease-in-out;
+	}
+
+	@keyframes wiggle {
+		0% { rotate: -2deg; }
+		50% { rotate: 2deg; }
+		100% { rotate: -2deg; }
 	}
 </style>

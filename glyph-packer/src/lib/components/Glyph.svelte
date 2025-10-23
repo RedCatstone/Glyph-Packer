@@ -58,18 +58,27 @@
                 class="cell"
                 class:on={cell === 1}
 				class:editable={editable}
-				class:highlighted={highlightedAreas?.some((area: HighlightArea) => {
-					const { y1, x1, y2, x2 } = area;
-					return y >= y1 && y < y2 && x >= x1 && x < x2;
-				})}
 				onpointerdown={() => handlePointerDown(y, x)}
+				oncontextmenu={(e: Event) => e.preventDefault()}
 				onpointerover={() => handlePointerOver(y, x)}
 				aria-label="Cell {y+1}, {x+1}"
-				data-y={y}
-				data-x={x}
+				role="figure"
             ></svelte:element>
 		{/each}
 	{/each}
+
+	<!-- render highlighted areas ontop -->
+	{#each highlightedAreas as area}
+			<div
+				class="highlight-overlay"
+				style="
+					--x1: {area.x1};
+					--y1: {area.y1};
+					--x2: {area.x2};
+					--y2: {area.y2};
+				"
+			></div>
+		{/each}
 </div>
 
 <style>
@@ -78,16 +87,15 @@
 		grid-template-columns: repeat(var(--columns), 1fr);
 		height: fit-content;
 		/* border: 2px solid var(--color-bg-1); */
+        /* border-radius: 4px; */
 		gap: 1px;
-        border-radius: 4px;
-        /* padding: 3px; */
+		position: relative;
 	}
 
 	.cell {
 		width: calc(var(--cell-size) - 1px); /* account for gap */
 		height: calc(var(--cell-size) - 1px);
-		--background-color: var(--color-bg-1);
-		background-color: var(--background-color);
+		background-color: var(--color-bg-1);
         border-radius: 10%;
 
 		/* Reset button styles if it's a button */
@@ -96,7 +104,7 @@
 	}
 
 	.cell.on {
-		--background-color: var(--color-theme-2);
+		background-color: var(--color-theme-2);
 	}
 
 	button.cell:hover {
@@ -105,7 +113,15 @@
         z-index: 10;
 	}
 
-	.cell.highlighted {
-		background-color: color-mix(in oklab, var(--background-color) 80%, var(--color-highlight) 20%);
+	.highlight-overlay {
+		position: absolute;
+		top: calc(var(--y1) * var(--cell-size));
+		left: calc(var(--x1) * var(--cell-size));
+		width: calc(calc(var(--x2) - var(--x1)) * var(--cell-size));
+		height: calc(calc(var(--y2) - var(--y1)) * var(--cell-size));
+		
+		background-color: rgb(from var(--color-highlight) r g b / 0.2);
+		outline: 2px solid var(--color-highlight);
+		border-radius: 3px;
 	}
 </style>

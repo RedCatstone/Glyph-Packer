@@ -1,18 +1,20 @@
 <script lang="ts">
 	import GlyphSelector from '../lib/components/GlyphSelector.svelte';
 	import { glyphsLib } from '$lib/glyphLib'
-	import Gameboard, { type DragState } from '$lib/components/Gameboard.svelte';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Gameboard, { type DragState, type GlyphData } from '$lib/components/Gameboard.svelte';
 	
 
 	const currGlyphs = $state(glyphsLib.numbers);
-	const currGlyphGlyphs = $derived(Object.entries(currGlyphs.glyphs));
+	const glyphDatas: GlyphData[] = $state(Object.entries(currGlyphs.glyphs)
+		.map(x =>
+			({ glyph: x[1], name: x[0], positions: [] })
+		));
 
-	const patternHeight = $derived(currGlyphGlyphs[0][1]?.length);
-	const patternWidth = $derived(currGlyphGlyphs[0][1]?.[0]?.length);
-	let gamegrid = $state(Array.from({ length: patternHeight + 1 }, () => Array(patternWidth + 1).fill(0)));
+	const patternHeight = glyphDatas[0]?.glyph?.length;
+	const patternWidth = glyphDatas[0]?.glyph?.[0]?.length;
+	let gamegrid = $state(Array.from({ length: patternHeight + 2 }, () => Array(patternWidth + 2).fill(0)));
 
-	let hoveredGlyph = $state<number[][] | null>(null);
+	let hoveredGlyph = $state<GlyphData | null>(null);
 
 
 
@@ -50,12 +52,12 @@
 
 	<div class="play-area">
 		<GlyphSelector
-			glyphs={currGlyphGlyphs}
+			glyphs={glyphDatas}
 			onGlyphHover={(x) => hoveredGlyph = x}
 			onGlyphLeave={() => hoveredGlyph = null}
 			onGlyphDragStart={handleGlyphDragStart}
 		/>
-		<Gameboard bind:grid={gamegrid} {cellSize} highlightGlyph={hoveredGlyph} bind:dragState={dragState}/>
+		<Gameboard bind:grid={gamegrid} {cellSize} {hoveredGlyph} bind:dragState={dragState} {glyphDatas}/>
 	</div>
 </div>
 

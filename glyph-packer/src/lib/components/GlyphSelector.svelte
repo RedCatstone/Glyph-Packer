@@ -1,30 +1,33 @@
 <script lang="ts">
+	import type { GlyphData } from './Gameboard.svelte';
 	import Glyph from './Glyph.svelte';
 
     const { glyphs, onGlyphHover, onGlyphLeave, onGlyphDragStart } = $props<{
-		glyphs: [string, number[][]][];
-		onGlyphHover: (newHoveredGlyph: number[][]) => void;
+		glyphs: GlyphData[];
+		onGlyphHover: (hoveredGlyph: GlyphData) => void;
 		onGlyphLeave: () => void;
 		onGlyphDragStart: (glyph: number[][], event: PointerEvent) => void;
 	}>();
 </script>
 
-
-<div class="glyphs">
-    {#each glyphs as [glyphName, glyphTexture] }
-	<div
-		class="glyph-item"
-		onpointerenter={() => onGlyphHover(glyphTexture)}
-		onpointerleave={() => onGlyphLeave()}
-		onpointerdown={(e) => onGlyphDragStart(glyphTexture, e)}
-
-		role="grid"
-		tabindex="0"
-	>
-		<Glyph grid={[...glyphTexture]} />
-		<!-- <span>{glyphName}</span> -->
+<div class="glyphs-container">
+	<div class="glyphs">
+	    {#each glyphs as glyphData }
+		<div
+			class="glyph-item"
+			class:done={glyphData.positions.length > 0}
+			onpointerenter={() => onGlyphHover(glyphData)}
+			onpointerleave={() => onGlyphLeave()}
+			onpointerdown={(e) => onGlyphDragStart(glyphData.glyph, e)}
+	
+			role="grid"
+			tabindex="0"
+		>
+			<Glyph grid={[...glyphData.glyph]} />
+			<!-- <span>{glyphName}</span> -->
+		</div>
+	    {/each}
 	</div>
-    {/each}
 </div>
 
 
@@ -48,5 +51,10 @@
 	.glyph-item:hover {
 		outline: 2px solid var(--color-selection);
 		background-color: rgb(from var(--color-theme-1) r g b / 0.1);
+	}
+
+	.glyph-item.done {
+		opacity: 0.6;
+		filter: grayscale(70%);
 	}
 </style>
