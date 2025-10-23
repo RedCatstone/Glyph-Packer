@@ -1,0 +1,84 @@
+@import '@fontsource/fira-mono';
+
+:root {
+	--font-body:
+		Arial, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell,
+		'Open Sans', 'Helvetica Neue', sans-serif;
+	--font-mono: 'Fira Mono', monospace;
+	--color-bg-0: #202020;
+	--color-bg-1: #303030;
+	--color-bg-2: #555;
+	--color-theme-1: #5832e2;
+	--color-theme-2: #b12442;
+	--color-text: rgba(255, 255, 255, 0.7);
+	--column-width: 42rem;
+	--column-margin-top: 4rem;
+
+	--color-selection: var(--color-theme-1);
+	--color-highlight: #ffc700;
+
+
+	font-family: var(--font-body);
+	color: var(--color-text);
+}
+
+body {
+	min-height: 100vh;
+	margin: 0;
+	background-color: var(--color-bg-0);
+}
+
+h1, h2, p {
+	font-weight: 400;
+}
+h1 {
+	font-size: 2rem;
+	text-align: center;
+}
+h2 {
+	font-size: 1rem;
+}
+p {
+	line-height: 1.5;
+}
+
+a {
+	color: var(--color-theme-1);
+	text-decoration: none;
+}
+a:hover {
+	text-decoration: underline;
+}
+
+input, button {
+	font-size: inherit;
+	font-family: inherit;
+	color: var(--color-text);
+	background-color: var(--color-bg-1);
+	padding: 5px;
+	border: 2px solid var(--color-bg-2);
+	border-radius: 8px;
+	transition: background-color 50ms;
+}
+input:hover, button:hover {
+	cursor: pointer;
+	background-color: color-mix(in oklab, var(--color-bg-1) 93%, #fff 7%);
+}
+input:active, button:active {
+	background-color: color-mix(in oklab, var(--color-bg-1) 70%, #fff 30%);
+}
+input:focus:not(:focus-visible) button:focus:not(:focus-visible) {
+	outline: none;
+}
+
+@media (min-width: 720px) {
+	h1 {
+		font-size: 2.4rem;
+	}
+}
+
+
+div {
+	scrollbar-color: var(--color-bg-2) var(--color-bg-1);
+	scrollbar-width: thin;
+}
