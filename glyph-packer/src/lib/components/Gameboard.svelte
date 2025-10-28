@@ -1,21 +1,32 @@
 <script lang="ts">
+	import { untrack } from "svelte";
 	import Glyph, { type HighlightArea } from "./Glyph.svelte";
-	export type DragState = { glyph: number[][] | null; x: number; y: number };
-	export type GlyphData = { glyph: number[][]; name: String; positions: [number, number][] }
+	export type DragState = { glyph: number[][] | null, x: number, y: number };
+	export type GlyphData = { glyph: number[][], name: string, color?: string }
 
-    let { grid=$bindable(), cellSize, hoveredGlyph, dragState=$bindable(), glyphDatas } = $props<{
-		grid: number[][],
+    let { maxPatternHeight, maxPatternWidth, cellSize, hoveredGlyph, glyphPositions=$bindable(), dragState=$bindable(), glyphDatas } = $props<{
+		maxPatternHeight: number,
+		maxPatternWidth: number,
 		cellSize: number,
 		hoveredGlyph: GlyphData | null,
+		glyphPositions: { [key: string]: [number, number][] },
 		dragState: DragState,
 		glyphDatas: GlyphData[],
 	}>();
 
+	let grid: number[][] = $state(Array.from({ length: maxPatternHeight + 2 }, () => Array(maxPatternWidth + 2).fill(0)));
 	const gridHeight = $derived(grid.length);
 	const gridWidth = $derived(grid[0].length);
+
+	let gridBounds = $state({ top: Infinity, bottom: -Infinity, left: Infinity, right: -Infinity });
+	let lockHeight = $state(false);
+	let lockWidth = $state(false);
 	
-	const initialGridHeight = grid.length;
-	const initialGridWidth = grid[0].length;
+	// Stats
+	const drawingHeight = $derived(Math.max(0, gridBounds.bottom - gridBounds.top + 1));
+	const drawingWidth = $derived(Math.max(0, gridBounds.right - gridBounds.left + 1));
+	const totalBlocks = $derived(grid.reduce((tot, x) => tot + x.reduce((itot, ix) => itot + Number(ix !== 0), 0), 0));
+
 
 	const highlightedAreas = $derived((() => {
 		if (hoveredGlyph === null) return [];
@@ -23,7 +34,7 @@
 		const hoveredGlyphHeight = hoveredGlyph.glyph.length;
 		const hoveredGlyphWidth = hoveredGlyph.glyph[0].length;
 
-		return hoveredGlyph.positions.map(([y1, x1]: [number, number]) => ({ y1, x1, y2: y1 + hoveredGlyphHeight, x2: x1 + hoveredGlyphWidth }))
+		return glyphPositions[hoveredGlyph.name]?.map(([y1, x1]: [number, number]) => ({ y1, x1, y2: y1 + hoveredGlyphHeight, x2: x1 + hoveredGlyphWidth }));
 	})());
 
 
@@ -69,13 +80,13 @@
 				while (gridHeight < gridY + dragGlyphHeight) { gridAddRow(false); }
 				while (gridWidth < gridX + dragGlyphWidth) { gridAddColumn(false); }
 
+				// paste pattern onto the grid
 				for (let dy = 0; dy < dragGlyphHeight; dy++) {
 					for (let dx = 0; dx < dragGlyphWidth; dx++) {
 						grid[gridY + dy][gridX + dx] = dragState.glyph[dy][dx];
 					}
 				}
-				updateGridPadding();
-				updateAllGlyphPositions();
+				fullUpdate();
 			}
 			dragState.glyph = null;
 		}
@@ -101,23 +112,28 @@
 
 
     // add 1 extra padding row in all directions around the grid
-    function updateGridPadding() {
-		if (gridHeight === 0 || gridWidth === 0) throw new Error(`grid was empty?! ${grid}`);
-		
+    function updateGridPadding() {		
         // add buffer rows
-        if (grid[0].includes(1)) gridAddRow(true);
-        if (grid.at(-1)!.includes(1)) gridAddRow(false);
+        if (!lockHeight && grid[0].includes(1)) gridAddRow(true);
+        if (!lockHeight && grid.at(-1)!.includes(1)) gridAddRow(false);
 
         // add buffer columns
-        if (grid.some((row: number[]) => row[0] === 1)) gridAddColumn(true);
-        if (grid.some((row: number[]) => row.at(-1) === 1)) gridAddColumn(false);
+        if (!lockWidth && grid.some(row => row[0] === 1)) gridAddColumn(true);
+        if (!lockWidth && grid.some(row => row.at(-1) === 1)) gridAddColumn(false);
+
+		const extraRows = 2 * Number(!lockHeight);
+		const extraColumns = 2 * Number(!lockWidth);
+
+		// add rows/columns if grid is too smol
+		while (gridHeight - extraRows < maxPatternHeight) gridAddRow(false);
+		while (gridWidth - extraColumns < maxPatternWidth) gridAddColumn(false);
 
 		// trim empty rows
-		while (gridHeight > initialGridHeight && !grid[0].includes(1) && !grid[1].includes(1)) gridRemoveRow(true);
-		while (gridHeight > initialGridHeight && !grid.at(-1)!.includes(1) && !grid.at(-2)!.includes(1)) gridRemoveRow(false);
+		while (gridHeight - extraRows > maxPatternHeight && !grid[0].includes(1) && (lockHeight || !grid[1].includes(1))) gridRemoveRow(true);
+		while (gridHeight - extraRows > maxPatternHeight && !grid.at(-1)!.includes(1) && (lockHeight || !grid.at(-2)!.includes(1))) gridRemoveRow(false);
 		// Trim empty columns
-		while (gridWidth > initialGridWidth && !grid.some((row: number[]) => row[0] === 1) && !grid.some((row: number[]) => row[1] === 1)) gridRemoveColumn(true);
-		while (gridWidth > initialGridWidth && !grid.some((row: number[]) => row.at(-1) === 1) && !grid.some((row: number[]) => row.at(-2) === 1)) gridRemoveColumn(false);
+		while (gridWidth - extraColumns > maxPatternWidth && !grid.some(row => row[0] === 1) && (lockWidth || !grid.some(row => row[1] === 1))) gridRemoveColumn(true);
+		while (gridWidth - extraColumns > maxPatternWidth && !grid.some(row => row.at(-1) === 1) && (lockWidth || !grid.some(row => row.at(-2) === 1))) gridRemoveColumn(false);
     }
 
 	function gridAddRow(top: boolean) {
@@ -129,34 +145,36 @@
 		else grid.pop();
 	}
 	function gridAddColumn(left: boolean) {
-		if (left) grid.forEach((row: number[]) => row.unshift(0));
-		else grid.forEach((row: number[]) => row.push(0));
+		if (left) grid.forEach(row => row.unshift(0));
+		else grid.forEach(row => row.push(0));
 	}
 	function gridRemoveColumn(left: boolean) {
-		if (left) grid.forEach((row: number[]) => row.shift())
-		else grid.forEach((row: number[]) => row.pop());
+		if (left) grid.forEach(row => row.shift())
+		else grid.forEach(row => row.pop());
 	}
 
 
 	function updateAllGlyphPositions() {
+		glyphPositions = {};
 		for (const glyphData of glyphDatas) {
 			updateGlyphPositions(glyphData);
 		}
 	}
 
 	function updateGlyphPositions(glyphData: GlyphData) {
-		glyphData.positions = [];
+		let newPositions: [number, number][] = [];
 
 		const glyphHeight = glyphData.glyph.length;
 		const glyphWidth = glyphData.glyph[0].length;
 
-		for (let y = 0; y < gridHeight - glyphHeight; y++) {
+		for (let y = 0; y <= gridHeight - glyphHeight; y++) {
 			for (let x = 0; x <= gridWidth - glyphWidth; x++) {
 				if (isGlyphAt(glyphData.glyph, y, x, glyphHeight, glyphWidth)) {
-					glyphData.positions.push([y, x]);
+					newPositions.push([y, x]);
 				}
 			}
 		}
+		glyphPositions[glyphData.name] = newPositions;
 	}
 
 	function isGlyphAt(glyph: number[][], y: number, x: number, glyphHeight: number, glyphWidth: number): boolean {
@@ -169,28 +187,118 @@
 		}
 		return true; // matched
 	}
+
+	function fullUpdate() {
+		updateGridPadding();
+		recalculateAllBounds();
+		updateAllGlyphPositions();
+	}
+
+	// this triggers when glyphDatas changes, so when the glyph pack changes
+	$effect(() => {
+		glyphDatas;
+		untrack(() => fullUpdate());
+	})
+
+
+	function onToggleCell(y: number, x: number) {
+		if (grid[y][x] !== 0) {
+			// toggled on!
+			if (y < gridBounds.top) gridBounds.top = y;
+			if (y > gridBounds.bottom) gridBounds.bottom = y;
+			if (x < gridBounds.left) gridBounds.left = x;
+			if (x > gridBounds.right) gridBounds.right = x;
+		}
+		else {
+			// toggled off, more complicated
+			recalculateAllBounds();
+		}
+		fullUpdate();
+	}
+
+	function recalculateAllBounds() {
+		let newTop = Infinity;
+		let newBottom = -Infinity;
+		let newLeft = Infinity;
+		let newRight = -Infinity;
+
+		for (let y = 0; y < gridHeight; y++) {
+			for (let x = 0; x < gridWidth; x++) {
+				if (grid[y][x] !== 0) {
+					if (y < newTop) newTop = y;
+					if (y > newBottom) newBottom = y;
+					if (x < newLeft) newLeft = x;
+					if (x > newRight) newRight = x;
+				}
+			}
+		}
+		gridBounds.top = newTop;
+		gridBounds.bottom = newBottom;
+		gridBounds.left = newLeft;
+		gridBounds.right = newRight;
+	}
 </script>
 
-
-<div class="gameboard-container">
-	<div class="gameboard-grid" bind:this={gameboardHTML}>
-		<Glyph bind:grid={grid} editable={true} {highlightedAreas} onpointerup={() => { updateGridPadding(); updateAllGlyphPositions() }} />
-	</div>
-
-	{#if dragState.glyph !== null}
-		<div class="drag-glyph" bind:this={dragGlyphHTML} style="--x: {dragState.x}px; --y: {dragState.y}px">
-			<Glyph grid={dragState.glyph} />
+<div class="overflow-div">
+	<div class="gameboard-container">
+		<!-- the 2 measuring sticks on left and top -->
+		<div class="lock-button lock-height">
+			<div class="measurer"
+				style="--bounds-top: {gridBounds.top === Infinity ? gridHeight/2 : gridBounds.top};
+					   --bounds-bottom: {gridBounds.bottom}">
+				<button class:active={lockHeight} onclick={() => { lockHeight = !lockHeight; fullUpdate()}}>{drawingHeight}</button>
+			</div>
 		</div>
-	{/if}
+		<div class="lock-button lock-width">
+			<div class="measurer"
+				style="--bounds-left: {gridBounds.left === Infinity ? gridWidth/2 : gridBounds.left};
+					   --bounds-right: {gridBounds.right}">
+				<button class:active={lockWidth} onclick={() => { lockWidth = !lockWidth; fullUpdate() }}>{drawingWidth}</button>
+			</div>
+		</div>
+
+		<!-- the actual gameboard -->
+		<div class="gameboard-grid" bind:this={gameboardHTML}>
+			<Glyph bind:grid={grid} editable={true} {highlightedAreas} {onToggleCell}/>
+		</div>
+
+		<!-- Area Calc -->
+		<div class="gameboard-bottom">
+			<span>Area: {drawingHeight * drawingWidth} - Blocks: {totalBlocks}</span>
+			<button onclick={() => { grid = [[]]; fullUpdate() }}>Reset</button>
+		</div>
+
+		<!-- dragging a glyph from the GlyphSelector -->
+		{#if dragState.glyph !== null}
+			<div class="drag-glyph" bind:this={dragGlyphHTML} style="--x: {dragState.x}px; --y: {dragState.y}px">
+				<Glyph grid={dragState.glyph} />
+			</div>
+		{/if}
+	</div>
 </div>
 
 <style>
-    .gameboard-container {
-		display: flex;
-		justify-content: center;
-		align-items: center;
+
+	.overflow-div {
+		height: 100%;
 		overflow: auto;
+		align-items: center;
+		display: flex;
+	}
+
+    .gameboard-container {
+		display: grid;
+		grid-template-rows: auto 1fr auto;
+		grid-template-columns: auto 1fr;
+		margin: auto;
     }
+
+	.gameboard-grid {
+		grid-row: 2;
+		grid-column: 2;
+		min-height: 0;
+		min-width: 0;
+	}
 
 	/* .gameboard-grid {
 		mask-image: linear-gradient(
@@ -208,6 +316,82 @@
 		);
 		mask-composite: intersect;
 	} */
+
+	.lock-button {
+		position: relative;
+		width: calc(1.5 * var(--cell-size));
+		height: calc(1.5 * var(--cell-size));
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.lock-height {
+		grid-row: 2;
+		grid-column: 1;
+	}
+
+	.lock-width {
+		grid-row: 1;	
+		grid-column: 2;
+	}
+
+	.gameboard-bottom {
+		grid-row: 3;
+		grid-column: 2;
+	}
+
+	.measurer {
+		position: absolute;
+		background-color: var(--cell-color);
+
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: all 0.1s ease-out;
+	}
+	.lock-height .measurer {
+		width: 3px;
+		top: calc(var(--bounds-top) * var(--cell-size));
+		height: calc((var(--bounds-bottom) - var(--bounds-top) + 1) * var(--cell-size));
+	}
+	.lock-width .measurer {
+		height: 3px;
+		left: calc(var(--bounds-left) * var(--cell-size));
+		width: calc((var(--bounds-right) - var(--bounds-left) + 1) * var(--cell-size));
+	}
+
+	/* measure caps */
+	.measurer::before,
+	.measurer::after {
+		content: '';
+		position: absolute;
+		background-color: inherit;
+		border-radius: 2px;
+		z-index: -1;
+	}
+	.lock-height .measurer::before {
+		top: 0;
+		width: 15px;
+		height: 3px;
+	}
+	.lock-height .measurer::after {
+		bottom: 0;
+		width: 15px;
+		height: 3px;
+	}
+	.lock-width .measurer::before {
+		left: 0;
+		width: 3px;
+		height: 15px;
+	}
+	.lock-width .measurer::after {
+		right: 0;
+		width: 3px;
+		height: 15px;
+	}
+
+
 
 	.drag-glyph {
 		position: fixed;

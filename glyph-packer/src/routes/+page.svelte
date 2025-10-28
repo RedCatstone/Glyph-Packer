@@ -3,18 +3,25 @@
 	import { glyphsLib } from '$lib/glyphLib'
 	import Gameboard, { type DragState, type GlyphData } from '$lib/components/Gameboard.svelte';
 	
-
-	const currGlyphs = $state(glyphsLib.numbers);
-	const glyphDatas: GlyphData[] = $state(Object.entries(currGlyphs.glyphs)
-		.map(x =>
-			({ glyph: x[1], name: x[0], positions: [] })
-		));
-
-	const patternHeight = glyphDatas[0]?.glyph?.length;
-	const patternWidth = glyphDatas[0]?.glyph?.[0]?.length;
-	let gamegrid = $state(Array.from({ length: patternHeight + 2 }, () => Array(patternWidth + 2).fill(0)));
-
+	const glyphPacks: GlyphData[] = $derived(
+		Object.entries(glyphsLib)
+			.map(([name, packData]) => ({
+				glyph: packData.glyphs[packData.thumbnail],
+				name,
+				color: packData.color,
+			}))
+	);
+	let currGlyphPackName = $state("Numbers");
+	const currPack = $derived(glyphsLib[currGlyphPackName]);
+	const glyphDatas: GlyphData[] = $derived(
+		Object.entries(currPack.glyphs).map(([name, glyph]) => ({ glyph, name }))
+	);	
+	
+	const maxPatternHeight = $derived(Math.max(...glyphDatas.map(x => x.glyph.length)));
+	const maxPatternWidth = $derived(Math.max(...glyphDatas.map(x => x.glyph[0].length)));
+	
 	let hoveredGlyph = $state<GlyphData | null>(null);
+	let glyphPositions = $state<{ [key: string]: [number, number][] }>({});
 
 
 
@@ -23,60 +30,62 @@
 		{ glyph: null, x: 0, y: 0 }
 	);
 
-	function handleGlyphDragStart(glyph: number[][], event: PointerEvent) {
-		dragState.glyph = glyph;
+	function handleGlyphDragStart(glyphData: GlyphData, event: PointerEvent) {
+		dragState.glyph = glyphData.glyph;
 		dragState.x = event.clientX;
 		dragState.y = event.clientY;
 		event.preventDefault();
 	}
 
 
-
-	let cellSize = $state(20);
-	function zoomIn() {
-		cellSize += 2;
-		cellSize = Math.min(cellSize, 60);
-	}
-	function zoomOut() {
-		cellSize -= 2;
-		cellSize = Math.max(cellSize, 4);
-	}
+	let cellSize = $state(25);
 </script>
 
-<div class="game" style="--cell-size: {cellSize}px">
-	<div class="controls">
+<div class="game" style="--cell-size: {cellSize}px; --cell-color: {currPack.color}">
+	<!-- <div class="controls">
 		Zoom
-		<button onclick={zoomOut}>-</button>
-		<button onclick={zoomIn}>+</button>
-	</div>
+		<button onclick={() => cellSize = Math.max(cellSize - 2, 4)}>-</button>
+		<button onclick={() => cellSize = Math.min(cellSize + 2, 60)}>+</button>
+	</div> -->
 
-	<div class="play-area">
+	<div class="glyph-selection-stuff">
+		<GlyphSelector
+			glyphs={glyphPacks}
+			showNames={true}
+			onGlyphDragStart={(glyph, event) => currGlyphPackName = glyph.name}
+		/>
+
 		<GlyphSelector
 			glyphs={glyphDatas}
+			{glyphPositions}
 			onGlyphHover={(x) => hoveredGlyph = x}
 			onGlyphLeave={() => hoveredGlyph = null}
 			onGlyphDragStart={handleGlyphDragStart}
 		/>
-		<Gameboard bind:grid={gamegrid} {cellSize} {hoveredGlyph} bind:dragState={dragState} {glyphDatas}/>
+	</div>
+	<div class="gameboard">
+		<Gameboard {maxPatternHeight} {maxPatternWidth} {cellSize} {hoveredGlyph} bind:glyphPositions={glyphPositions} bind:dragState={dragState} {glyphDatas}/>
 	</div>
 </div>
 
 <style>
 	.game {
 		display: flex;
-		flex-direction: column;
+		flex-direction: row;
 		justify-content: center;
 		align-items: center;
 		flex: 0.6;
+		gap: 30px;
 		max-height: 80vh;
 	}
 
-	.play-area {
+	.glyph-selection-stuff {
 		display: flex;
-		flex-direction: row;
-		gap: 2rem;
-		min-height: 0;
-		overflow: auto;
-		padding: 15px;
+		flex-direction: column;
+		gap: 30px;
+	}
+
+	.gameboard {
+		height: 80vh;
 	}
 </style>

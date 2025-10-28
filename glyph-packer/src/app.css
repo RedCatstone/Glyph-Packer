@@ -64,7 +64,7 @@ input:hover, button:hover {
 	cursor: pointer;
 	background-color: color-mix(in oklab, var(--color-bg-1) 93%, #fff 7%);
 }
-input:active, button:active {
+input:active, input.active button:active, button.active {
 	background-color: color-mix(in oklab, var(--color-bg-1) 70%, #fff 30%);
 }
 input:focus:not(:focus-visible) button:focus:not(:focus-visible) {

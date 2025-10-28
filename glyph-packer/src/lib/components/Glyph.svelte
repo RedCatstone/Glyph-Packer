@@ -7,39 +7,37 @@
 		editable = false,
 		highlightedAreas,
 		onpointerup,
+		onToggleCell,
 	} = $props<{
-		grid: number[][];
-		editable?: boolean;
-		highlightedAreas?: HighlightArea[];
-		onpointerup?: () => void;
+		grid: number[][],
+		editable?: boolean,
+		highlightedAreas?: HighlightArea[],
+		onpointerup?: () => void,
+		onToggleCell?: (y: number, x: number) => void,
 	}>();
-    let drag = $state({ isDragging: false, dragWith: 0 });
+    let dragState: number | null = $state(null);
 
-
-    function toggleCell(y: number, x: number) {
-        if (!editable) return;
-        const newValue = 1 - grid[y][x];
-        grid[y][x] = newValue;
-    }
 
     function handlePointerDown(y: number, x: number) {
         if (!editable) return;
-        drag.isDragging = true;
-        toggleCell(y, x);
-		drag.dragWith = grid[y][x];
+        const newValue = 1 - grid[y][x];
+        grid[y][x] = newValue;
+		dragState = newValue;
+		if (onToggleCell) onToggleCell(y, x);
     }
 
     function handlePointerOver(y: number, x: number) {
 		// Only toggle if we are in a dragging state AND the drag started here
-		if (drag.isDragging) {
-			grid[y][x] = drag.dragWith;
+		if (dragState != null) {
+			grid[y][x] = dragState;
+			onToggleCell(y, x);
 		}
 	}
 
 	// detects mouse button releases ANYWHERE on the page
 	$effect(() => {
 		const handlePointerUp = () => {
-			drag.isDragging = false;
+			dragState = null;
 			if (onpointerup) onpointerup();
 		};
 
@@ -71,12 +69,7 @@
 	{#each highlightedAreas as area}
 			<div
 				class="highlight-overlay"
-				style="
-					--x1: {area.x1};
-					--y1: {area.y1};
-					--x2: {area.x2};
-					--y2: {area.y2};
-				"
+				style="--x1: {area.x1}; --y1: {area.y1}; --x2: {area.x2}; --y2: {area.y2};"
 			></div>
 		{/each}
 </div>
@@ -84,30 +77,40 @@
 <style>
 	.glyph-grid {
 		display: grid;
-		grid-template-columns: repeat(var(--columns), 1fr);
+		grid-template-columns: repeat(var(--columns), var(--cell-size));
 		height: fit-content;
 		/* border: 2px solid var(--color-bg-1); */
-        /* border-radius: 4px; */
-		gap: 1px;
 		position: relative;
 	}
 
 	.cell {
-		width: calc(var(--cell-size) - 1px); /* account for gap */
-		height: calc(var(--cell-size) - 1px);
-		background-color: var(--color-bg-1);
-        border-radius: 10%;
-
-		/* Reset button styles if it's a button */
+		width: var(--cell-size);
+		height: var(--cell-size);
+		position: relative;
+		
+		/* Reset styles */
+		/* this element only has the hitbox, visuals are on ::after */
+		background-color: unset;
+        border-radius: 0;
 		border: none;
 		padding: 0;
 	}
 
-	.cell.on {
-		background-color: var(--color-theme-2);
+	.cell::after {
+		/* real styling */
+		background-color: var(--color-bg-1);
+		content: '';
+		position: absolute;
+		inset: 1px;
+		border-radius: 10%;
+
 	}
 
-	button.cell:hover {
+	.cell.on::after {
+		background-color: var(--cell-color);
+	}
+
+	button.cell:hover::after {
 		outline: 3px solid var(--color-selection);
 		cursor: pointer;
         z-index: 10;
