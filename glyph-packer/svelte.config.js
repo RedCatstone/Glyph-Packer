@@ -9,7 +9,6 @@ const config = {
 
 	kit: {
 		adapter: adapter({
-			// The folder where the built files will be placed.
 			pages: 'build',
 			assets: 'build',
 			fallback: '404.html',
