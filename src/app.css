@@ -50,7 +50,7 @@ a:hover {
 	text-decoration: underline;
 }
 
-input, button {
+input, button, select {
 	font-size: inherit;
 	font-family: inherit;
 	color: var(--color-text);
@@ -59,17 +59,16 @@ input, button {
 	border: 2px solid var(--color-bg-2);
 	border-radius: 8px;
 	transition: background-color 50ms;
+	appearance: none;
 }
-input:hover, button:hover {
+input:hover, button:hover, select:hover {
 	cursor: pointer;
 	background-color: color-mix(in oklab, var(--color-bg-1) 93%, #fff 7%);
 }
 input:active, input.active button:active, button.active {
 	background-color: color-mix(in oklab, var(--color-bg-1) 70%, #fff 30%);
 }
-input:focus:not(:focus-visible) button:focus:not(:focus-visible) {
-	outline: none;
-}
+
 
 @media (min-width: 720px) {
 	h1 {

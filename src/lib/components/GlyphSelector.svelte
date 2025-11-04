@@ -1,41 +1,35 @@
 <script lang="ts">
 	import type { GlyphData } from './Gameboard.svelte';
-	import Glyph from './Glyph.svelte';
+	import Glyph, { type HighlightArea } from './Glyph.svelte';
 
-    const { glyphs, glyphPositions, showNames, onGlyphHover, onGlyphLeave, onGlyphDragStart } = $props<{
-		glyphs: GlyphData[];
-		glyphPositions?: { [key: string]: [number, number][] },
-		showNames?: boolean;
-		onGlyphHover?: (hoveredGlyph: GlyphData) => void;
-		onGlyphLeave?: () => void;
-		onGlyphDragStart?: (glyph: GlyphData, event: PointerEvent) => void;
+    const { glyphs, glyphPositions, showNames=false, noShrink=false, onGlyphHover, onGlyphLeave, onGlyphDragStart } = $props<{
+		glyphs: GlyphData[],
+		glyphPositions?: HighlightArea[][],
+		showNames?: boolean,
+		noShrink?: boolean,
+		onGlyphHover?: (i: number) => void,
+		onGlyphLeave?: () => void,
+		onGlyphDragStart?: (glyph: GlyphData, event: PointerEvent) => void,
 	}>();
-
-	let sort = $state(false);
-
-	const glyphsToShow = $derived(sort
-		? glyphs.toSorted((a: GlyphData, b: GlyphData) => Number(glyphPositions?.[a.name]?.length > 0) - Number(glyphPositions?.[b.name]?.length > 0))
-		: glyphs);
 </script>
 
 
-<div class="glyphs-container">
-	{#if glyphPositions}
-		<button class:active={sort} onclick={() => sort = !sort}>Sort Finished</button>
-	{/if}
+<div style={noShrink ? "" : "overflow: auto"}>
+	<!-- glyphs itself -->
 	<div class="glyphs">
-	    {#each glyphsToShow as glyphData }
+	    {#each glyphs as glyphData, i }
 		<div
 			class="glyph-item"
-			class:done={glyphPositions?.[glyphData.name]?.length > 0}
-			onpointerenter={() => { if (onGlyphHover) onGlyphHover(glyphData) }}
+			class:done={glyphPositions?.[i]?.length > 0}
+			onpointerenter={() => { if (onGlyphHover) onGlyphHover(i) }}
 			onpointerleave={() => { if (onGlyphLeave) onGlyphLeave() }}
 			onpointerdown={(e) => { if (onGlyphDragStart) onGlyphDragStart(glyphData, e) }}
 			style={glyphData.color ? `--cell-color: ${glyphData.color}` : ""}
 			role="grid"
 			tabindex="0"
 		>
-			<Glyph grid={[...glyphData.glyph]} />
+			<!-- display the glyph. (only shows the 1st one) -->
+			<Glyph grid={[...glyphData.glyphs[0]]} />
 			{#if showNames}
 				<span>{glyphData.name}</span>
 			{/if}
@@ -46,10 +40,6 @@
 
 
 <style>
-	.glyphs-container {
-		overflow: auto;
-	}
-
     .glyphs {
 		display: grid;
 		grid-template-columns: repeat(4, 1fr);

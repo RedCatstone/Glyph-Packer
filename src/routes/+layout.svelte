@@ -1,20 +1,17 @@
 <script lang="ts">
-	import Header from './Header.svelte';
 	import '../app.css';
 
 	let { children } = $props();
 </script>
 
 <div class="app">
-	<Header />
-
 	<main>
 		{@render children()}
 	</main>
 
 	<footer>
 		<p>
-			check out <a href="https://redcatstone.github.io/Dont-connect-3/">Don't connect 2.5</a>!
+			check out <a href="https://redcatstone.github.io/Dont-connect-3/" target="_blank">Don't connect 2.5</a>!
 		</p>
 	</footer>
 </div>

@@ -2,14 +2,14 @@
 	import { untrack } from "svelte";
 	import Glyph, { type HighlightArea } from "./Glyph.svelte";
 	export type DragState = { glyph: number[][] | null, x: number, y: number };
-	export type GlyphData = { glyph: number[][], name: string, color?: string }
+	export type GlyphData = { glyphs: number[][][], name?: string, color?: string }
 
-    let { maxPatternHeight, maxPatternWidth, cellSize, hoveredGlyph, glyphPositions=$bindable(), dragState=$bindable(), glyphDatas } = $props<{
+    let { maxPatternHeight, maxPatternWidth, cellSize, hoveredGlyphIndex, glyphPositions=$bindable(), dragState=$bindable(), glyphDatas } = $props<{
 		maxPatternHeight: number,
 		maxPatternWidth: number,
 		cellSize: number,
-		hoveredGlyph: GlyphData | null,
-		glyphPositions: { [key: string]: [number, number][] },
+		hoveredGlyphIndex: number | null,
+		glyphPositions: HighlightArea[][],
 		dragState: DragState,
 		glyphDatas: GlyphData[],
 	}>();
@@ -29,12 +29,9 @@
 
 
 	const highlightedAreas = $derived((() => {
-		if (hoveredGlyph === null) return [];
+		if (hoveredGlyphIndex === null) return [];
 
-		const hoveredGlyphHeight = hoveredGlyph.glyph.length;
-		const hoveredGlyphWidth = hoveredGlyph.glyph[0].length;
-
-		return glyphPositions[hoveredGlyph.name]?.map(([y1, x1]: [number, number]) => ({ y1, x1, y2: y1 + hoveredGlyphHeight, x2: x1 + hoveredGlyphWidth }));
+		return glyphPositions[hoveredGlyphIndex];
 	})());
 
 
@@ -155,26 +152,28 @@
 
 
 	function updateAllGlyphPositions() {
-		glyphPositions = {};
-		for (const glyphData of glyphDatas) {
-			updateGlyphPositions(glyphData);
-		}
+		glyphPositions = [];
+		glyphDatas.forEach((glyphData: GlyphData, i: number) => {
+			glyphPositions[i] = getGlyphPositions(glyphData);
+		});
 	}
 
-	function updateGlyphPositions(glyphData: GlyphData) {
-		let newPositions: [number, number][] = [];
+	function getGlyphPositions(glyphData: GlyphData) {
+		let newPositions: HighlightArea[] = [];
 
-		const glyphHeight = glyphData.glyph.length;
-		const glyphWidth = glyphData.glyph[0].length;
+		for (const glyph of glyphData.glyphs) {
+			const glyphHeight = glyph.length;
+			const glyphWidth = glyph[0].length;
 
-		for (let y = 0; y <= gridHeight - glyphHeight; y++) {
-			for (let x = 0; x <= gridWidth - glyphWidth; x++) {
-				if (isGlyphAt(glyphData.glyph, y, x, glyphHeight, glyphWidth)) {
-					newPositions.push([y, x]);
+			for (let y = 0; y <= gridHeight - glyphHeight; y++) {
+				for (let x = 0; x <= gridWidth - glyphWidth; x++) {
+					if (isGlyphAt(glyph, y, x, glyphHeight, glyphWidth)) {
+						newPositions.push({ y1: y, x1: x, y2: y+glyphHeight, x2: x+glyphWidth });
+					}
 				}
 			}
 		}
-		glyphPositions[glyphData.name] = newPositions;
+		return newPositions;
 	}
 
 	function isGlyphAt(glyph: number[][], y: number, x: number, glyphHeight: number, glyphWidth: number): boolean {
