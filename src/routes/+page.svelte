@@ -1,8 +1,11 @@
 <script lang="ts">
 	import GlyphSelector from '../lib/components/GlyphSelector.svelte';
 	import { glyphsLib } from '$lib/glyphLib'
-	import Gameboard, { type DragState, type GlyphData } from '$lib/components/Gameboard.svelte';
+	import Gameboard, { type DragState, type GlyphData, type MaxPatternSizes } from '$lib/components/Gameboard.svelte';
 	import type { HighlightArea } from '$lib/components/Glyph.svelte';
+	import { allRotations, anyRotations, removeDuplicateGlyphs } from '$lib/glyphUtils';
+	import SettingsAndInfos, { type PersonalBest } from '$lib/components/SettingsAndInfos.svelte';
+	import { browser } from '$app/environment';
 
 	// random variables
 	let dragState = $state<DragState>({ glyph: null, x: 0, y: 0 });
@@ -10,15 +13,24 @@
 	let extraMode = $state('Normal');
 	let cellSize = $state(25);
 
+	let hoveredGlyphIndex = $state<number | null>(null);
+	let glyphPositions = $state<HighlightArea[][]>([]);
+
+
 	// data logic
-	const glyphPacks: GlyphData[] = $derived(
+	const glyphPacks: { glyphData: GlyphData, id: number }[] = $derived(
 		Object.entries(glyphsLib)
-			.map(([name, packData]) => ({
-				glyphs: packData.glyphs[packData.thumbnail],
-				name,
-				color: packData.color,
+			.map(([name, packData], id) => ({
+				glyphData: {
+					glyphs: packData.glyphs[packData.thumbnail],
+					name,
+					color: packData.color,
+				},
+				id,
 			}))
 	);
+
+	// curr pack data
 	let currGlyphPackName = $state("Numbers");
 	const currPack = $derived(glyphsLib[currGlyphPackName]);
 
@@ -26,67 +38,21 @@
 		const baseData = Object.entries(currPack.glyphs).map(([name, glyphs]): GlyphData => ({ glyphs, name }));
 
 		if (extraMode === "Normal") 					return baseData;
-		else if (extraMode === "Any Rotations") 		return baseData.map(({ glyphs, name }) => ({ glyphs: anyRotations(glyphs, false), name }));
-		else if (extraMode === "Any Rotations/Mirrors") return baseData.map(({ glyphs, name }) => ({ glyphs: anyRotations(glyphs, true), name }));
-		else if (extraMode === "All Rotations") 		return jsonRemoveDupes(baseData.flatMap(({ glyphs, name }) => allRotations(glyphs, false).map(glyphs => ({ glyphs }))));
-		else if (extraMode === "All Rotations/Mirrors") return jsonRemoveDupes(baseData.flatMap(({ glyphs, name }) => allRotations(glyphs, true).map(glyphs => ({ glyphs }))));
+		else if (extraMode === "Any Rotation") 			return removeDuplicateGlyphs(baseData.map(({ glyphs, name }) => ({ glyphs: anyRotations(glyphs, false), name })));
+		else if (extraMode === "Any Rotation/Mirror") 	return removeDuplicateGlyphs(baseData.map(({ glyphs, name }) => ({ glyphs: anyRotations(glyphs, true), name })));
+		else if (extraMode === "All Rotations") 		return removeDuplicateGlyphs(baseData.flatMap(({ glyphs, name }) => allRotations(glyphs, false).map(glyphs => ({ glyphs, name }))));
+		else if (extraMode === "All Rotations/Mirrors") return removeDuplicateGlyphs(baseData.flatMap(({ glyphs, name }) => allRotations(glyphs, true).map(glyphs => ({ glyphs, name }))));
 		else throw new Error("how did you get to this mode?!");
 	})());
 
-	function jsonRemoveDupes(arr: any[]): any[] {
-		return Array.from(new Set(arr.map(x => JSON.stringify(x)))).map(x => JSON.parse(x));
-	}
-
-	function anyRotations(matrices: number[][][], includeMirrors: boolean): number[][][] {
-		const transforms = [];
-		for (const matrix of matrices) {
-			for (const r of [0, 1, 2, 3]) {
-				const rotated = rotateMatrix(matrix, r);
-				transforms.push(rotated);
-				if (includeMirrors) transforms.push(flipMatrixHorizontal(rotated));
-			}
-		}
-		return jsonRemoveDupes(transforms);
-	}
-	function allRotations(matrices: number[][][], includeMirrors: boolean): number[][][][] {
-		const transforms = [];
-		for (const r of [0, 1, 2, 3]) {
-			const rotat = [];
-			const inver = [];
-			for (const matrix of matrices) {
-				const rotated = rotateMatrix(matrix, r);
-				rotat.push(rotated);
-				if (includeMirrors) inver.push(flipMatrixHorizontal(rotated));
-			}
-			transforms.push(rotat);
-			if (includeMirrors) transforms.push(inver);
-		}
-		return jsonRemoveDupes(transforms);
-	}
-
-	function rotateMatrix(matrix: any[][], rotations: number) {
-	    for (let r = 0; r < rotations; r++) {
-	        const height = matrix.length;
-	        const width = matrix[0].length;
-	        const newMatrix = Array(width).fill(null).map(() => Array(height));
-	        for (let y = 0; y < height; y++) {
-	            for (let x = 0; x < width; x++) {
-	                newMatrix[x][height - 1 - y] = matrix[y][x];
-	            }
-	        }
-	        matrix = newMatrix;
-	    }
-	    return matrix;
-	}
-	function flipMatrixHorizontal(matrix: any[][]) {
-		return matrix.map(row => [...row].reverse());
-	}
 	
-	const maxPatternHeight = $derived(Math.max(...glyphDatas.flatMap(pack => pack.glyphs).map(glyph => glyph.length)));
-	const maxPatternWidth = $derived(Math.max(...glyphDatas.flatMap(pack => pack.glyphs).map(glyph => glyph[0].length)));
-	
-	let hoveredGlyphIndex = $state<number | null>(null);
-	let glyphPositions = $state<HighlightArea[][]>([]);
+	// maximum sizes within alts
+	const maxPatternSizes: MaxPatternSizes = $derived({
+		maxMaxHeight: Math.max(...glyphDatas.map(datas => Math.max(...datas.glyphs.map(glyph => glyph.length)))),
+		maxMaxWidth: Math.max(...glyphDatas.map(datas => Math.max(...datas.glyphs.map(glyph => glyph[0].length)))),
+		maxMinHeight: Math.max(...glyphDatas.map(datas => Math.min(...datas.glyphs.map(glyph => glyph.length)))),
+		maxMinWidth: Math.max(...glyphDatas.map(datas => Math.min(...datas.glyphs.map(glyph => glyph[0].length)))),
+	});
 
 
 	function handleGlyphDragStart(glyphData: GlyphData, event: PointerEvent) {
@@ -97,13 +63,46 @@
 	}
 
 	function sortGlyphs(glyphs: GlyphData[]) {
-		if (!sortFinished) return glyphs;
+		if (!sortFinished) return glyphs.map((glyphData, id) => ({ glyphData, id }));
 		else {
 			return glyphDatas
-				.map((x, i) => ({ x, i }))
-				.toSorted((a, b) => Number(glyphPositions?.[a.i]?.length > 0) - Number(glyphPositions?.[b.i]?.length > 0))
-				.map(({ x, i }) => x);
+				.map((x, i) => ({ x, i, positions: glyphPositions[i] }))
+				.toSorted((a, b) => Number(a.positions?.length > 0) - Number(b.positions?.length > 0))
+				.map(({ x, i }) => ({ glyphData: x, id: i }));
 		}
+	}
+
+
+	let personalBests: { [key: string /* packname */]: { [key: string /* modename */]: { [key: string /* savename */]: PersonalBest } } } = persistentState('glyph-packer-pbs', {});
+	let personalBestsPack = $derived(personalBests[currGlyphPackName] ?? {});
+	let personalBestsPackMode = $derived(personalBestsPack[extraMode] ?? {});
+	
+	$effect(() => {
+		if (!personalBests[currGlyphPackName]) personalBests[currGlyphPackName] = {};
+		if (!personalBestsPack[extraMode]) personalBestsPack[extraMode] = {};
+	});
+
+	function persistentState(key: string, initialValue: any) {
+		// try loading / default
+		let stateValue = initialValue;
+		if (browser) {
+			const savedValue = localStorage.getItem(key);
+			if (savedValue) {
+				try {
+					stateValue = JSON.parse(savedValue);
+				} catch {
+					// If JSON parsing fails, stick with the initial value.
+					console.warn(`Failed to parse localStorage value for key: ${key}`);
+				}
+			}
+		}
+	    // create the holy state variable
+		const state = $state(stateValue);
+		$effect(() => {
+			localStorage.setItem(key, JSON.stringify(state));
+			console.log(`Saved '${key}' to localStorage.`);
+		});
+		return state;
 	}
 </script>
 
@@ -120,7 +119,7 @@
 			glyphs={glyphPacks}
 			showNames={true}
 			noShrink={true}
-			onGlyphDragStart={(glyph, event) => currGlyphPackName = glyph.name!}
+			handleGlyphDragStart={(glyph, event) => currGlyphPackName = glyph.name!}
 		/>
 
 		<!-- glyph selector -->
@@ -129,24 +128,15 @@
 			{glyphPositions}
 			onGlyphHover={(x) => hoveredGlyphIndex = x}
 			onGlyphLeave={() => hoveredGlyphIndex = null}
-			onGlyphDragStart={handleGlyphDragStart}
+			{handleGlyphDragStart}
 		/>
 
 		<!-- Settings -->
-		<div>
-			<button class:active={sortFinished} onclick={() => sortFinished = !sortFinished}>Sort Finished</button>
-			<select bind:value={extraMode}>
-				<option value="Any Rotations/Mirrors">Any Rotations/Mirrors</option>
-				<option value="Any Rotations">Any Rotations</option>
-				<option value="Normal">Normal</option>
-				<option value="All Rotations">All Rotations</option>
-				<option value="All Rotations/Mirrors">All Rotations/Mirrors</option>
-			</select>
-		</div>
+		<SettingsAndInfos {glyphPositions} bind:sortFinished={sortFinished} bind:extraMode={extraMode} personalBests={personalBestsPack} {handleGlyphDragStart}/>
 	</div>
 	<div class="gameboard">
 		<!-- the actual board -->
-		<Gameboard {maxPatternHeight} {maxPatternWidth} {cellSize} {hoveredGlyphIndex} bind:glyphPositions={glyphPositions} bind:dragState={dragState} {glyphDatas}/>
+		<Gameboard {maxPatternSizes} {cellSize} {hoveredGlyphIndex} bind:glyphPositions={glyphPositions} bind:dragState={dragState} {glyphDatas} bind:personalBest={personalBestsPackMode}/>
 	</div>
 </div>
 
@@ -156,13 +146,14 @@
 		flex-direction: row;
 		justify-content: center;
 		flex: 0.6;
-		gap: 30px;
+		gap: 10px;
 		max-height: 80vh;
 	}
 
 	.glyph-selection-stuff {
 		display: flex;
 		flex-direction: column;
-		gap: 30px;
+		gap: 20px;
+		overflow: auto;
 	}
 </style>

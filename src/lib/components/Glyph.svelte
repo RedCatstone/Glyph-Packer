@@ -8,13 +8,13 @@
 		highlightedAreas,
 		onpointerup,
 		onToggleCell,
-	} = $props<{
+	}: {
 		grid: number[][],
 		editable?: boolean,
 		highlightedAreas?: HighlightArea[],
 		onpointerup?: () => void,
 		onToggleCell?: (y: number, x: number) => void,
-	}>();
+	} = $props();
     let dragState: number | null = $state(null);
 
 
@@ -30,7 +30,7 @@
 		// Only toggle if we are in a dragging state AND the drag started here
 		if (dragState != null) {
 			grid[y][x] = dragState;
-			onToggleCell(y, x);
+			if (onToggleCell) onToggleCell(y, x);
 		}
 	}
 

@@ -1,20 +1,23 @@
 <script lang="ts">
 	import { untrack } from "svelte";
 	import Glyph, { type HighlightArea } from "./Glyph.svelte";
+	import type { PersonalBest } from "./SettingsAndInfos.svelte";
+	import { calculateAreaInGrid, calculateBlocksInGrid } from "$lib/glyphUtils";
 	export type DragState = { glyph: number[][] | null, x: number, y: number };
-	export type GlyphData = { glyphs: number[][][], name?: string, color?: string }
+	export type GlyphData = { glyphs: number[][][], name?: string, color?: string };
+	export type MaxPatternSizes = { maxMaxHeight: number, maxMaxWidth: number, maxMinHeight: number, maxMinWidth: number };
 
-    let { maxPatternHeight, maxPatternWidth, cellSize, hoveredGlyphIndex, glyphPositions=$bindable(), dragState=$bindable(), glyphDatas } = $props<{
-		maxPatternHeight: number,
-		maxPatternWidth: number,
+    let { maxPatternSizes, cellSize, hoveredGlyphIndex, glyphPositions=$bindable(), dragState=$bindable(), glyphDatas, personalBest=$bindable() }: {
+		maxPatternSizes: MaxPatternSizes,
 		cellSize: number,
 		hoveredGlyphIndex: number | null,
 		glyphPositions: HighlightArea[][],
 		dragState: DragState,
 		glyphDatas: GlyphData[],
-	}>();
+		personalBest: { [key: string /* savename */]: PersonalBest },
+	} = $props();
 
-	let grid: number[][] = $state(Array.from({ length: maxPatternHeight + 2 }, () => Array(maxPatternWidth + 2).fill(0)));
+	let grid: number[][] = $state(Array.from({ length: maxPatternSizes.maxMaxHeight + 2 }, () => Array(maxPatternSizes.maxMinWidth + 2).fill(0)));
 	const gridHeight = $derived(grid.length);
 	const gridWidth = $derived(grid[0].length);
 
@@ -25,9 +28,32 @@
 	// Stats
 	const drawingHeight = $derived(Math.max(0, gridBounds.bottom - gridBounds.top + 1));
 	const drawingWidth = $derived(Math.max(0, gridBounds.right - gridBounds.left + 1));
-	const totalBlocks = $derived(grid.reduce((tot, x) => tot + x.reduce((itot, ix) => itot + Number(ix !== 0), 0), 0));
+	const totalBlocks = $derived(calculateBlocksInGrid(grid));
 
 
+	// this triggers when glyphDatas changes, so when the glyph pack changes
+	$effect(() => {
+		glyphDatas;
+		untrack(() => fullUpdate());
+	});
+
+
+	// pb tracking
+	$effect(() => {
+		// if every glyph is placed
+		if (glyphPositions.every(x => x.length > 0)) {
+			const newBest = grid.slice(gridBounds.top, gridBounds.bottom+1).map(row => row.slice(gridBounds.left, gridBounds.right+1));
+			if (!personalBest['Best'] || 
+				calculateAreaInGrid(newBest) + calculateBlocksInGrid(newBest)
+				< calculateAreaInGrid(personalBest['Best']) + calculateBlocksInGrid(personalBest['Best'])
+			) {
+				personalBest['Best'] = newBest;
+			}
+		}
+	});
+
+
+	// highlighted areas appear when hovering over a glyph in the glyph selector
 	const highlightedAreas = $derived((() => {
 		if (hoveredGlyphIndex === null) return [];
 
@@ -118,19 +144,30 @@
         if (!lockWidth && grid.some(row => row[0] === 1)) gridAddColumn(true);
         if (!lockWidth && grid.some(row => row.at(-1) === 1)) gridAddColumn(false);
 
+		let requiredHeight;
+		let requiredWidth;
+		if (!lockWidth && lockHeight) {
+			requiredHeight = maxPatternSizes.maxMinHeight;
+			requiredWidth = maxPatternSizes.maxMaxWidth;
+		}
+		else {
+			requiredHeight = maxPatternSizes.maxMaxHeight;
+			requiredWidth = maxPatternSizes.maxMinWidth;
+		}
+
 		const extraRows = 2 * Number(!lockHeight);
 		const extraColumns = 2 * Number(!lockWidth);
 
 		// add rows/columns if grid is too smol
-		while (gridHeight - extraRows < maxPatternHeight) gridAddRow(false);
-		while (gridWidth - extraColumns < maxPatternWidth) gridAddColumn(false);
+		while (gridHeight - extraRows < requiredHeight) gridAddRow(false);
+		while (gridWidth - extraColumns < requiredWidth) gridAddColumn(false);
 
 		// trim empty rows
-		while (gridHeight - extraRows > maxPatternHeight && !grid[0].includes(1) && (lockHeight || !grid[1].includes(1))) gridRemoveRow(true);
-		while (gridHeight - extraRows > maxPatternHeight && !grid.at(-1)!.includes(1) && (lockHeight || !grid.at(-2)!.includes(1))) gridRemoveRow(false);
+		while (gridHeight - extraRows > requiredHeight && !grid[0].includes(1) && (lockHeight || !grid[1].includes(1))) gridRemoveRow(true);
+		while (gridHeight - extraRows > requiredHeight && !grid.at(-1)!.includes(1) && (lockHeight || !grid.at(-2)!.includes(1))) gridRemoveRow(false);
 		// Trim empty columns
-		while (gridWidth - extraColumns > maxPatternWidth && !grid.some(row => row[0] === 1) && (lockWidth || !grid.some(row => row[1] === 1))) gridRemoveColumn(true);
-		while (gridWidth - extraColumns > maxPatternWidth && !grid.some(row => row.at(-1) === 1) && (lockWidth || !grid.some(row => row.at(-2) === 1))) gridRemoveColumn(false);
+		while (gridWidth - extraColumns > requiredWidth && !grid.some(row => row[0] === 1) && (lockWidth || !grid.some(row => row[1] === 1))) gridRemoveColumn(true);
+		while (gridWidth - extraColumns > requiredWidth && !grid.some(row => row.at(-1) === 1) && (lockWidth || !grid.some(row => row.at(-2) === 1))) gridRemoveColumn(false);
     }
 
 	function gridAddRow(top: boolean) {
@@ -193,48 +230,25 @@
 		updateAllGlyphPositions();
 	}
 
-	// this triggers when glyphDatas changes, so when the glyph pack changes
-	$effect(() => {
-		glyphDatas;
-		untrack(() => fullUpdate());
-	})
-
-
-	function onToggleCell(y: number, x: number) {
-		if (grid[y][x] !== 0) {
-			// toggled on!
-			if (y < gridBounds.top) gridBounds.top = y;
-			if (y > gridBounds.bottom) gridBounds.bottom = y;
-			if (x < gridBounds.left) gridBounds.left = x;
-			if (x > gridBounds.right) gridBounds.right = x;
-		}
-		else {
-			// toggled off, more complicated
-			recalculateAllBounds();
-		}
-		fullUpdate();
-	}
-
 	function recalculateAllBounds() {
-		let newTop = Infinity;
-		let newBottom = -Infinity;
-		let newLeft = Infinity;
-		let newRight = -Infinity;
+		let top = Infinity;
+		let bottom = -Infinity;
+		let left = Infinity;
+		let right = -Infinity;
 
 		for (let y = 0; y < gridHeight; y++) {
 			for (let x = 0; x < gridWidth; x++) {
+				if (grid[y][x] === undefined) throw new Error('what.');
 				if (grid[y][x] !== 0) {
-					if (y < newTop) newTop = y;
-					if (y > newBottom) newBottom = y;
-					if (x < newLeft) newLeft = x;
-					if (x > newRight) newRight = x;
+					if (y < top) top = y;
+					if (y > bottom) bottom = y;
+					if (x < left) left = x;
+					if (x > right) right = x;
 				}
 			}
 		}
-		gridBounds.top = newTop;
-		gridBounds.bottom = newBottom;
-		gridBounds.left = newLeft;
-		gridBounds.right = newRight;
+
+		gridBounds = { top, bottom, left, right };
 	}
 </script>
 
@@ -258,7 +272,7 @@
 
 		<!-- the actual gameboard -->
 		<div class="gameboard-grid" bind:this={gameboardHTML}>
-			<Glyph bind:grid={grid} editable={true} {highlightedAreas} {onToggleCell}/>
+			<Glyph bind:grid={grid} editable={true} {highlightedAreas} onToggleCell={fullUpdate}/>
 		</div>
 
 		<!-- Area Calc -->

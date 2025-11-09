@@ -2,28 +2,28 @@
 	import type { GlyphData } from './Gameboard.svelte';
 	import Glyph, { type HighlightArea } from './Glyph.svelte';
 
-    const { glyphs, glyphPositions, showNames=false, noShrink=false, onGlyphHover, onGlyphLeave, onGlyphDragStart } = $props<{
-		glyphs: GlyphData[],
+    const { glyphs, glyphPositions, showNames=false, noShrink=false, onGlyphHover, onGlyphLeave, handleGlyphDragStart }: {
+		glyphs: { glyphData: GlyphData, id: number }[],
 		glyphPositions?: HighlightArea[][],
 		showNames?: boolean,
 		noShrink?: boolean,
 		onGlyphHover?: (i: number) => void,
 		onGlyphLeave?: () => void,
-		onGlyphDragStart?: (glyph: GlyphData, event: PointerEvent) => void,
-	}>();
+		handleGlyphDragStart?: (glyph: GlyphData, event: PointerEvent) => void,
+	} = $props();
 </script>
 
 
 <div style={noShrink ? "" : "overflow: auto"}>
 	<!-- glyphs itself -->
 	<div class="glyphs">
-	    {#each glyphs as glyphData, i }
+	    {#each glyphs as { glyphData, id } }
 		<div
 			class="glyph-item"
-			class:done={glyphPositions?.[i]?.length > 0}
-			onpointerenter={() => { if (onGlyphHover) onGlyphHover(i) }}
+			class:done={!!(glyphPositions?.[id]?.length)}
+			onpointerenter={() => { if (onGlyphHover) onGlyphHover(id) }}
 			onpointerleave={() => { if (onGlyphLeave) onGlyphLeave() }}
-			onpointerdown={(e) => { if (onGlyphDragStart) onGlyphDragStart(glyphData, e) }}
+			onpointerdown={(e) => { if (handleGlyphDragStart) handleGlyphDragStart(glyphData, e) }}
 			style={glyphData.color ? `--cell-color: ${glyphData.color}` : ""}
 			role="grid"
 			tabindex="0"

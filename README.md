@@ -1,38 +1,26 @@
-# sv
+# Glyph Packer
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+Glyph Packer is a fun little website where you get to pack different glyphs/textures into a small area. The glyphs are a few pixels in a small grid. The default glyph-packs are:
+- Numbers
+- Letters
+- Tetris Pieces
+- Pentominos
 
-## Creating a project
+Here is an example of the smallest way (i know of) to pack the numbers, with the 4 being highlighted:  
+<img width="638" height="754" alt="image" src="https://github.com/user-attachments/assets/1173472d-f4ac-46bf-a01b-91811aedfbfc" />
 
-If you're seeing this, you've probably already done this step. Congrats!
 
-```sh
-# create a new project in the current directory
-npx sv create
+# Extra Stuff
+for each pack there are 5 mode options (just for the extra challenge):
+- Any Rotation/Mirror
+- Any Rotation
+- Normal
+- All Rotations
+- All Rotations/Mirror
 
-# create a new project in my-app
-npx sv create my-app
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```sh
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+# Future Plans
+I plan on adding:
+- saving of highscores on each mode/pack.
+- custom pack creations
+- sharing a custom pack over clipboard
+- making the layout better in general/for mobile
